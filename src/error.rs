@@ -17,5 +17,13 @@ pub enum WrkError {
     #[error(transparent)]
     TimeFormat(#[from] time::error::Format),
     #[error(transparent)]
+    TimeParse(#[from] time::error::Parse),
+    #[error(transparent)]
     TimeDesc(#[from] time::error::InvalidFormatDescription),
+    #[error(transparent)]
+    Url(#[from] url::ParseError),
+    #[error(transparent)]
+    WrkBuilder(#[from] crate::wrk::WrkBuilderError),
+    #[error(transparent)]
+    ConfigBuilder(#[from] crate::config::BenchmarkBuilderError),
 }

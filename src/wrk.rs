@@ -3,22 +3,31 @@ use std::{
     env,
     fs::{self, File},
     io::{BufReader, BufWriter, Read, Write},
+    ops::Add,
     path::{Path, PathBuf},
     process::Command,
+    time::Duration,
 };
 
 use getset::{Getters, MutGetters, Setters};
+use rslua::lexer::Lexer;
 use serde::{Deserialize, Serialize};
 use tempfile::NamedTempFile;
-use time::{OffsetDateTime, format_description};
+use time::{format_description, Instant, OffsetDateTime};
+use url::Url;
 
-use crate::{config::WrkConfig, error::WrkError, result::WrkResult, Result};
+use crate::{
+    config::{Benchmark, BenchmarkBuilder},
+    error::WrkError,
+    result::WrkResult,
+    Result,
+};
 
 const LUA_DEFAULT_DONE_FUNCTION: &str = r#"
-# The done() function is called at the end of wrk execution
-# and allows us to produce a well formed JSON output, prefixed
-# by the string "JSON" which allows us to parse the wrk output
-# easily.
+-- The done() function is called at the end of wrk execution
+-- and allows us to produce a well formed JSON output, prefixed
+-- by the string "JSON" which allows us to parse the wrk output
+-- easily.
 done = function(summary, latency, requests)
     local errors = summary.errors.connect
         + summary.errors.read
@@ -27,7 +36,7 @@ done = function(summary, latency, requests)
         + summary.errors.timeout
     io.write("JSON")
     io.write(string.format(
-        [[{{
+        [[{
     "requests": %d,
     "errors": %d,
     "successes": %d,
@@ -42,7 +51,7 @@ done = function(summary, latency, requests)
     "errors_write": %d,
     "errors_status": %d,
     "errors_timeout": %d
-}}
+}
 ]],
         summary.requests,
         errors,
@@ -61,26 +70,82 @@ done = function(summary, latency, requests)
     ))
 end
 "#;
+const DATE_FORMAT: &str =
+    "[year]-[month]-[day]:[hour]:[minute]:[second]-[offset_hour sign:mandatory]:[offset_minute]:[offset_second]";
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum HistoryPeriod {
+    Last,
+    Hour,
+    Day,
+    Week,
+    Month,
+}
+
+impl Default for HistoryPeriod {
+    fn default() -> Self {
+        HistoryPeriod::Last
+    }
+}
+
+impl HistoryPeriod {
+    pub fn last(&self) -> OffsetDateTime {
+        let now = OffsetDateTime::now_utc();
+        match self {
+            Self::Last => now,
+            Self::Hour => now.add(time::Duration::HOUR),
+            Self::Day => now.add(time::Duration::DAY),
+            Self::Week => now.add(time::Duration::WEEK),
+            Self::Month => now.add(time::Duration::WEEK * 4),
+        }
+    }
+}
+
+pub type Benchmarks = Vec<WrkResult>;
+pub type BenchmarksHistory = Vec<Benchmarks>;
+pub type Headers = HashMap<String, String>;
+
+/// Wrapper around Wrk enabling to run benchmarks, record historical data and plot graphs.
 #[derive(Debug, Clone, Serialize, Deserialize, Getters, Setters, MutGetters, Builder)]
 pub struct Wrk {
+    /// Url of the service to benchmark against. Use the full URL of the request.
+    /// IE: http://localhost:1234/some/uri.
     #[getset(get = "pub", set = "pub", get_mut = "pub")]
     url: String,
+    /// Set of benchmarks for the current instance.
+    #[builder(default = "self.default_benchmarks()")]
     #[getset(get = "pub", set = "pub", get_mut = "pub")]
-    data: HashMap<WrkConfig, WrkResult>,
+    benchmarks: Benchmarks,
+    /// Historical benchmarks data, indexed by dates.
+    #[builder(default = "self.default_benchmarks()")]
+    #[getset(get = "pub", set = "pub", get_mut = "pub")]
+    benchmarks_history: Benchmarks,
+    /// Directory on disk where to store and read the historical benchmark data.
     #[builder(default = "self.default_storage_dir()")]
     #[getset(get = "pub", set = "pub", get_mut = "pub")]
-    storage_dir: PathBuf,
+    history_dir: PathBuf,
+    /// User defined LUA script to run through wrk.
+    /// **NOTE: This script MUST not override the wrk function `done()` as it already
+    /// overriden by this crate to allow wrk to spit out a parsable JSON output.
+    #[builder(default = "self.default_user_script()")]
     #[getset(get = "pub", set = "pub", get_mut = "pub")]
-    lua_script: Option<PathBuf>,
+    user_script: Option<PathBuf>,
+    /// Header to add to the wrk request.
+    #[builder(default = "self.default_headers()")]
     #[getset(get = "pub", set = "pub", get_mut = "pub")]
-    headers: HashMap<String, String>,
+    headers: Headers,
+    /// Method for the wrk request.
     #[builder(default = "self.default_method()")]
     #[getset(get = "pub", set = "pub", get_mut = "pub")]
     method: String,
+    /// Body for the wrk request.
     #[builder(default = "self.default_body()")]
     #[getset(get = "pub", set = "pub", get_mut = "pub")]
     body: String,
+    /// Max percentage of errors vs total request to conside a benchmark healthy.
+    #[builder(default = "self.default_max_error_percentage()")]
+    #[getset(get = "pub", set = "pub", get_mut = "pub")]
+    max_error_percentage: u8,
 }
 
 impl WrkBuilder {
@@ -93,20 +158,35 @@ impl WrkBuilder {
     fn default_storage_dir(&self) -> PathBuf {
         Path::new(".").join(".wrk-api-bench")
     }
+    fn default_benchmarks(&self) -> Benchmarks {
+        Benchmarks::new()
+    }
+    fn default_benchmarks_history(&self) -> BenchmarksHistory {
+        BenchmarksHistory::new()
+    }
+    fn default_headers(&self) -> Headers {
+        Headers::new()
+    }
+    fn default_user_script(&self) -> Option<PathBuf> {
+        None
+    }
+    fn default_max_error_percentage(&self) -> u8 {
+        2
+    }
 }
 
 impl Wrk {
     fn lua_script_from_config(&self, uri: &str) -> Result<PathBuf> {
         let request = format!(
             r#"
-            # The request() function is called by wrk on all requests
-            # and allow us to configure things like headers, method, body, etc..
-            request = function()"
-                wrk.method = "{}"
-                wrk.body = "{}"
-                {}
-                return wrk.format("{}", "{}")
-            end
+-- The request() function is called by wrk on all requests
+-- and allow us to configure things like headers, method, body, etc..
+request = function()
+    wrk.method = "{}"
+    wrk.body = "{}"
+    {}
+    return wrk.format("{}", "{}")
+end
         "#,
             self.method(),
             self.body(),
@@ -117,7 +197,9 @@ impl Wrk {
         let buffer = request + LUA_DEFAULT_DONE_FUNCTION;
         let mut tmpfile = NamedTempFile::new()?;
         tmpfile.write_all(buffer.as_bytes())?;
-        Ok(tmpfile.path().to_path_buf())
+        let result = tmpfile.path().to_path_buf();
+        tmpfile.keep().unwrap();
+        Ok(result)
     }
 
     fn lua_script_from_user(&self, lua_script: &Path) -> Result<PathBuf> {
@@ -125,6 +207,8 @@ impl Wrk {
         let mut reader = BufReader::new(file);
         let mut buffer = String::new();
         reader.read_to_string(&mut buffer)?;
+        let mut lexer = Lexer::new();
+        let tokens = lexer.run(&buffer).map_err(|e| WrkError::Lua(format!("{:?}", e)))?;
         let buffer = buffer + LUA_DEFAULT_DONE_FUNCTION;
         let mut tmpfile = NamedTempFile::new()?;
         tmpfile.write_all(buffer.as_bytes())?;
@@ -133,14 +217,14 @@ impl Wrk {
 
     fn lua_headers(&self) -> Result<String> {
         let mut result = String::new();
-        for (k, v) in self.headers().iter() {
+        for (k, v) in self.headers() {
             result += &format!(r#"wrk.headers["{}"] = "{}"\n"#, k, v);
         }
         Ok(result)
     }
 
     fn lua_find_script(&self, uri: &str) -> Result<PathBuf> {
-        match self.lua_script() {
+        match self.user_script() {
             Some(lua_script) => {
                 if !lua_script.exists() {
                     error!(
@@ -157,98 +241,164 @@ impl Wrk {
         }
     }
 
-    pub fn bench(&mut self, config: WrkConfig, max_error_percentage: u16) -> Result<()> {
-        if !self.storage_dir().exists() {
-            fs::create_dir(self.storage_dir()).unwrap_or_else(|e| {
+    fn wrk_args(&self, benchmark: &Benchmark) -> Result<Vec<String>> {
+        let url = Url::parse(self.url())?;
+        let lua_script = self.lua_find_script(url.path())?;
+        Ok(vec![
+            "-t".to_string(),
+            benchmark.threads().to_string(),
+            "-c".to_string(),
+            benchmark.connections().to_string(),
+            "-d".to_string(),
+            format!("{}s", benchmark.duration().as_secs()),
+            "-s".to_string(),
+            lua_script.to_string_lossy().to_string(),
+            url.to_string(),
+        ])
+    }
+
+    fn wrk_result(&self, wrk_json: &str) -> WrkResult {
+        match serde_json::from_str::<WrkResult>(wrk_json) {
+            Ok(mut run) => {
+                let error_percentage = run.errors() / 100 * run.requests();
+                if error_percentage < *self.max_error_percentage() as u64 {
+                    *run.success_mut() = true;
+                } else {
+                    error!(
+                        "Errors percentage is {}%, which is more than {}%",
+                        error_percentage, self.max_error_percentage
+                    );
+                }
+                run
+            }
+            Err(e) => {
+                error!("Wrk JSON result deserialize failed: {}", e);
+                WrkResult::fail(e.to_string())
+            }
+        }
+    }
+
+    pub fn bench(&mut self, benchmarks: &Vec<Benchmark>) -> Result<()> {
+        if !self.history_dir().exists() {
+            fs::create_dir(self.history_dir()).unwrap_or_else(|e| {
                 error!(
                     "Unable to create storage dir {}: {}. Statistics calculation could be impaired",
-                    self.storage_dir().display(),
+                    self.history_dir().display(),
                     e
                 );
             });
         }
-        let lua_script = self.lua_find_script(config.uri())?;
-        let args = vec![
-            "-t".to_string(),
-            config.threads().to_string(),
-            "-d".to_string(),
-            config.connections().to_string(),
-            "-d".to_string(),
-            format!("{}s", config.duration().as_secs()),
-            "-s".to_string(),
-            lua_script.to_string_lossy().to_string(),
-            format!("{}/{}", self.url(), config.uri()),
-        ];
-        let run = match Command::new("wrk").args(args).output() {
-            Ok(wrk) => {
-                let output = String::from_utf8_lossy(&wrk.stdout);
-                let error = String::from_utf8_lossy(&wrk.stderr);
-                if wrk.status.success() {
-                    debug!("Wrk execution succeded:\n{}", output);
-                    let wrk_json = output.split("JSON").nth(1).unwrap_or("{}");
-                    match serde_json::from_str::<WrkResult>(wrk_json) {
-                        Ok(mut run) => {
-                            let error_percentage = run.errors() / 100 * run.requests();
-                            if error_percentage < max_error_percentage.into() {
-                                *run.success_mut() = true;
-                            } else {
-                                error!(
-                                    "Errors percentage is {}%, which is more than {}%",
-                                    error_percentage, max_error_percentage
-                                );
-                            }
-                            run
-                        }
-                        Err(e) => {
-                            error!("Wrk JSON result deserialize failed: {}", e);
-                            WrkResult::fail(e.to_string())
-                        }
+        let format = format_description::parse(DATE_FORMAT)?;
+        let date = OffsetDateTime::now_utc().format(&format)?;
+        for benchmark in benchmarks {
+            let mut run = match Command::new("wrk").args(self.wrk_args(benchmark)?).output() {
+                Ok(wrk) => {
+                    let output = String::from_utf8_lossy(&wrk.stdout);
+                    let error = String::from_utf8_lossy(&wrk.stderr);
+                    if wrk.status.success() {
+                        debug!("Wrk execution succeded:\n{}", output);
+                        let wrk_json = output
+                            .split("JSON")
+                            .nth(1)
+                            .ok_or_else(|| WrkError::Lua("Wrk returned empty JSON".to_string()))?;
+                        self.wrk_result(wrk_json)
+                    } else {
+                        error!("Wrk execution failed.\nOutput: {}\nError: {}", output, error);
+                        WrkResult::fail(error.to_string())
                     }
-                } else {
-                    error!("Wrk execution failed.\nOutput: {}\nError: {}", output, error);
-                    WrkResult::fail(error.to_string())
+                }
+                Err(e) => {
+                    error!("Wrk execution failed: {}", e);
+                    WrkResult::fail(e.to_string())
+                }
+            };
+            *run.date_mut() = date.clone();
+            println!("Current run: {:?}", run);
+            self.benchmarks_mut().push(run);
+        }
+        self.dump(&date)?;
+        Ok(())
+    }
+
+    pub fn bench_exponential(&mut self, duration: Option<Duration>) -> Result<()> {
+        self.bench(&BenchmarkBuilder::exponential(duration))?;
+        Ok(())
+    }
+
+    fn dump(&self, date: &str) -> Result<()> {
+        let filename = format!("result.{}.json", date);
+        let file = File::create(self.history_dir().join(&filename))?;
+        let writer = BufWriter::new(file);
+        println!("Writing current benchmark to {}", filename);
+        serde_json::to_writer(writer, &self.benchmarks())?;
+        Ok(())
+    }
+
+    fn flatten<T>(&self, nested: Vec<Vec<T>>) -> Vec<T> {
+        nested.into_iter().flatten().collect()
+    }
+
+    fn load(&mut self, period: Option<HistoryPeriod>) -> Result<()> {
+        let period = period.unwrap_or_default();
+        let paths = fs::read_dir(self.history_dir())?;
+        let format = format_description::parse(DATE_FORMAT)?;
+        let mut history = BenchmarksHistory::new();
+        for path in paths {
+            let path = path?;
+            if let Some(date_str) = path.file_name().to_string_lossy().split('.').nth(1) {
+                let date = OffsetDateTime::parse(date_str, &format)?;
+                if date < period.last() {
+                    let file = File::open(path.path())?;
+                    let mut reader = BufReader::new(file);
+                    let benchmarks = serde_json::from_reader(&mut reader)?;
+                    history.push(benchmarks);
                 }
             }
-            Err(e) => {
-                error!("Wrk execution failed: {}", e);
-                WrkResult::fail(e.to_string())
-            }
-        };
-        self.data_mut().insert(config, run);
+        }
+        *self.benchmarks_history_mut() = self.flatten(history);
         Ok(())
     }
 
-    fn dump(&self) -> Result<()> {
-        let now = OffsetDateTime::now_utc(); 
-        let format = format_description::parse("%Y-%m-%d.%H:%M:%S")?;
-        let filename = format!("result.{}.json", now.format(&format)?);
-        let file = File::open(self.storage_dir().join(filename))?;
-        let writer = BufWriter::new(file);
-        serde_json::to_writer(writer, &self.data())?;
-        Ok(())
-    }
-
-    fn load(&self) -> Result<HashMap<WrkConfig, WrkResult>> {
-        let file = File::open(self.storage_dir.join(".smithy-bench/old.json"))?;
-        let mut reader = BufReader::new(file);
-        Ok(serde_json::from_reader(&mut reader)?)
+    fn best_benchmark(&self, benchmarks: &Benchmarks) -> Result<WrkResult> {
+        let best = benchmarks.iter().filter(|v| *v.success()).max_by(|a, b| {
+            a.requests_sec()
+                .cmp(b.requests_sec())
+                .then(a.successes().cmp(b.successes()))
+                .then(a.requests().cmp(b.requests()))
+                .then(a.transfer_mb().cmp(b.transfer_mb()))
+        });
+        best.map(|x| x.clone())
+            .ok_or_else(|| WrkError::Stats("Unable to calculate best run in set".to_string()))
     }
 
     fn best(&self) -> Result<WrkResult> {
-        let best = self.data().iter().filter(|v| *v.1.success()).max_by(|a, b| {
-            a.1.requests_sec()
-                .cmp(b.1.requests_sec())
-                .then(a.1.successes().cmp(b.1.successes()))
-                .then(a.1.requests().cmp(b.1.requests()))
-                .then(a.1.transfer_mb().cmp(b.1.transfer_mb()))
-        });
-        best.map(|x| x.1.clone())
-            .ok_or(WrkError::Stats("Unable to calculate best run in set".to_string()))
+        self.best_benchmark(self.benchmarks())
     }
 
-    fn compare(&self) -> Result<()> {
-        let best = self.best()?;
-        let old = self.load()?;
-        Ok(())
+    fn historical_best(&self) -> Result<WrkResult> {
+        self.best()
+    }
+}
+
+mod tests {
+    use std::{thread, time::Duration};
+
+    use super::*;
+    use crate::config::BenchmarkBuilder;
+
+    #[test]
+    fn benchmark() {
+        let mut wrk = WrkBuilder::default()
+            .url("http://localhost:13734/pokemon-species/pikachu".to_string())
+            .build()
+            .unwrap();
+        // wrk.bench_exponential(Some(Duration::from_secs(5))).unwrap();
+        wrk.bench(&vec![BenchmarkBuilder::default()
+            .duration(Duration::from_secs(5))
+            .build()
+            .unwrap()])
+            .unwrap();
+        wrk.load(None).unwrap();
+        println!("MEEEEEEEEEEEEEEEE {:?}", wrk.benchmarks_history());
     }
 }

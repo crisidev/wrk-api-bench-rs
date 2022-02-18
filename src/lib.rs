@@ -6,13 +6,13 @@ extern crate derive_builder;
 extern crate log;
 
 mod config;
+mod error;
 mod result;
 mod wrk;
-mod error;
 
+pub use config::Benchmark;
 pub use error::WrkError;
-pub use wrk::Wrk;
-pub use config::WrkConfig;
 pub use result::WrkResult;
+pub use wrk::Wrk;
 
 pub(crate) type Result<T> = std::result::Result<T, WrkError>;

@@ -1,42 +1,64 @@
-use core::fmt;
 use std::time::Duration;
 
+use getset::{Getters, MutGetters, Setters};
 use serde::{Deserialize, Serialize};
-use getset::{Getters, Setters, MutGetters};
 
-#[derive(Debug, PartialEq, Hash, Clone, Serialize, Deserialize, Getters, Setters, MutGetters)]
-pub struct WrkConfig {
+#[derive(Debug, PartialEq, Hash, Clone, Serialize, Deserialize, Getters, Setters, MutGetters, Builder)]
+pub struct Benchmark {
+    #[builder(default = "self.default_threads()")]
     #[getset(get = "pub", set = "pub", get_mut = "pub")]
     threads: u16,
+    #[builder(default = "self.default_connections()")]
     #[getset(get = "pub", set = "pub", get_mut = "pub")]
     connections: u16,
+    #[builder(default = "self.default_duration()")]
     #[getset(get = "pub", set = "pub", get_mut = "pub")]
     duration: Duration,
-    #[getset(get = "pub", set = "pub", get_mut = "pub")]
-    uri: String,
 }
 
-impl Eq for WrkConfig {}
+impl BenchmarkBuilder {
+    fn default_threads(&self) -> u16 {
+        8
+    }
 
-impl WrkConfig {
-    pub fn new(threads: u16, connections: u16, duration: u64, uri: &str) -> Self {
+    fn default_connections(&self) -> u16 {
+        32
+    }
+
+    fn default_duration(&self) -> Duration {
+        Duration::from_secs(30)
+    }
+
+    pub fn exponential(duration: Option<Duration>) -> Vec<Benchmark> {
+        let duration = duration.unwrap_or_else(|| Duration::from_secs(30));
+        let threads_list = [2, 4, 8, 16];
+        let connections_list = [32, 64, 128, 256];
+        let mut benchmarks = Vec::new();
+        for threads in threads_list {
+            for connections in connections_list {
+                benchmarks.push(Benchmark {
+                    threads,
+                    connections,
+                    duration,
+                });
+            }
+        }
+        benchmarks
+    }
+}
+
+impl Eq for Benchmark {}
+
+impl Benchmark {
+    pub fn new(threads: u16, connections: u16, duration: u64) -> Self {
         Self {
             threads,
             connections,
             duration: Duration::from_secs(duration),
-            uri: uri.to_string(),
         }
     }
-}
 
-impl fmt::Display for WrkConfig {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "threads: {} connections: {} duration: {} secs",
-            self.threads,
-            self.connections,
-            self.duration.as_secs()
-        )
+    pub fn to_key(&self) -> String {
+        format!("{}-{}-{}", self.threads, self.connections, self.duration.as_secs())
     }
 }

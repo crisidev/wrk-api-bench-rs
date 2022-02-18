@@ -1,5 +1,5 @@
-use serde::{Serialize, Deserialize};
-use getset::{Getters, Setters, MutGetters};
+use getset::{Getters, MutGetters, Setters};
+use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Default, Clone, Getters, Setters, MutGetters)]
 pub struct WrkResult {
@@ -9,6 +9,9 @@ pub struct WrkResult {
     #[serde(skip)]
     #[getset(get = "pub", set = "pub", get_mut = "pub")]
     error: String,
+    #[serde(default)]
+    #[getset(get = "pub", set = "pub", get_mut = "pub")]
+    date: String,
     #[getset(get = "pub", set = "pub", get_mut = "pub")]
     requests: u64,
     #[getset(get = "pub", set = "pub", get_mut = "pub")]
