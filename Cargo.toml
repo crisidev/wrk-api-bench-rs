@@ -1,0 +1,20 @@
+[package]
+name = "wrk-api-bench"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+assert_cmd = "2.0"
+derive_builder = "0.10"
+getset = "0.1"
+log = "0.4"
+pretty_assertions = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tempfile = "3"
+thiserror = "1"
+time = { version = "0.3", "features" = ["formatting"] }
+tokio = { version = "1", features = ["full"] }
+tokio-serde-json = "0.3"
