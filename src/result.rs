@@ -68,8 +68,45 @@ pub struct Variance {
 }
 
 impl Variance {
-    pub fn new(variance: WrkResult, new: WrkResult, old: WrkResult) -> Self {
+    pub fn new(new: WrkResult, old: WrkResult) -> Self {
+        println!("{} {}", new.requests_sec(), old.requests_sec());
+        let requests_sec = Self::calculate(new.requests_sec(), old.requests_sec());
+        let requests = Self::calculate(new.requests(), old.requests());
+        let successes = Self::calculate(new.successes(), old.successes());
+        let errors = Self::calculate(new.errors(), old.errors());
+        let avg_latency_ms = Self::calculate(new.avg_latency_ms(), old.avg_latency_ms());
+        let min_latency_ms = Self::calculate(new.min_latency_ms(), old.min_latency_ms());
+        let max_latency_ms = Self::calculate(new.max_latency_ms(), old.max_latency_ms());
+        let stdev_latency_ms = Self::calculate(new.stdev_latency_ms(), old.stdev_latency_ms());
+        let transfer_mb = Self::calculate(new.transfer_mb(), old.transfer_mb());
+        let errors_connect = Self::calculate(new.errors_connect(), old.errors_connect());
+        let errors_read = Self::calculate(new.errors_read(), old.errors_read());
+        let errors_write = Self::calculate(new.errors_write(), old.errors_write());
+        let errors_status = Self::calculate(new.errors_status(), old.errors_status());
+        let errors_timeout = Self::calculate(new.errors_timeout(), old.errors_timeout());
+        let variance = WrkResultBuilder::default()
+            .date(new.date().to_string())
+            .requests(requests)
+            .errors(errors)
+            .successes(successes)
+            .requests_sec(requests_sec)
+            .avg_latency_ms(avg_latency_ms)
+            .min_latency_ms(min_latency_ms)
+            .max_latency_ms(max_latency_ms)
+            .stdev_latency_ms(stdev_latency_ms)
+            .transfer_mb(transfer_mb)
+            .errors_connect(errors_connect)
+            .errors_read(errors_read)
+            .errors_write(errors_write)
+            .errors_status(errors_status)
+            .errors_timeout(errors_timeout)
+            .build()
+            .unwrap();
         Self { variance, new, old }
+    }
+
+    fn calculate(new: &f64, old: &f64) -> f64 {
+        (new - old) / old * 100.0
     }
 }
 

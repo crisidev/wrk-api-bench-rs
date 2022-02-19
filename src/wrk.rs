@@ -414,39 +414,7 @@ end
     pub fn variance(&self) -> Result<Variance> {
         let new = self.best()?;
         let old = self.historical_best()?;
-        println!("{} {}", new.requests_sec(), old.requests_sec());
-        let requests_sec = self.calculate_variance(new.requests_sec(), old.requests_sec());
-        let requests = self.calculate_variance(new.requests(), old.requests());
-        let successes = self.calculate_variance(new.successes(), old.successes());
-        let errors = self.calculate_variance(new.errors(), old.errors());
-        let avg_latency_ms = self.calculate_variance(new.avg_latency_ms(), old.avg_latency_ms());
-        let min_latency_ms = self.calculate_variance(new.min_latency_ms(), old.min_latency_ms());
-        let max_latency_ms = self.calculate_variance(new.max_latency_ms(), old.max_latency_ms());
-        let stdev_latency_ms = self.calculate_variance(new.stdev_latency_ms(), old.stdev_latency_ms());
-        let transfer_mb = self.calculate_variance(new.transfer_mb(), old.transfer_mb());
-        let errors_connect = self.calculate_variance(new.errors_connect(), old.errors_connect());
-        let errors_read = self.calculate_variance(new.errors_read(), old.errors_read());
-        let errors_write = self.calculate_variance(new.errors_write(), old.errors_write());
-        let errors_status = self.calculate_variance(new.errors_status(), old.errors_status());
-        let errors_timeout = self.calculate_variance(new.errors_timeout(), old.errors_timeout());
-        let variance = WrkResultBuilder::default()
-            .date(new.date().to_string())
-            .requests(requests)
-            .errors(errors)
-            .successes(successes)
-            .requests_sec(requests_sec)
-            .avg_latency_ms(avg_latency_ms)
-            .min_latency_ms(min_latency_ms)
-            .max_latency_ms(max_latency_ms)
-            .stdev_latency_ms(stdev_latency_ms)
-            .transfer_mb(transfer_mb)
-            .errors_connect(errors_connect)
-            .errors_read(errors_read)
-            .errors_write(errors_write)
-            .errors_status(errors_status)
-            .errors_timeout(errors_timeout)
-            .build()?;
-        Ok(Variance::new(variance, new, old))
+        Ok(Variance::new(new, old))
     }
 }
 
@@ -464,7 +432,7 @@ mod tests {
             .unwrap();
         // wrk.bench_exponential(Some(Duration::from_secs(5))).unwrap();
         wrk.bench(&vec![BenchmarkBuilder::default()
-            .duration(Duration::from_secs(5))
+            .duration(Duration::from_secs(20))
             .build()
             .unwrap()])
             .unwrap();
