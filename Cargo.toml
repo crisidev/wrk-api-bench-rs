@@ -10,6 +10,7 @@ assert_cmd = "2.0"
 derive_builder = "0.10"
 getset = "0.1"
 log = "0.4"
+prettytable-rs = "0.8"
 pretty_assertions = "1"
 rslua = "0.2"
 serde = { version = "1", features = ["derive"] }

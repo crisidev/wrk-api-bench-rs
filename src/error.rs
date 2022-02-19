@@ -25,5 +25,7 @@ pub enum WrkError {
     #[error(transparent)]
     WrkBuilder(#[from] crate::wrk::WrkBuilderError),
     #[error(transparent)]
+    WrkResultBuilder(#[from] crate::result::WrkResultBuilderError),
+    #[error(transparent)]
     ConfigBuilder(#[from] crate::config::BenchmarkBuilderError),
 }
