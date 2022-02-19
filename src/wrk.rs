@@ -10,15 +10,15 @@ use std::{
 };
 
 use assert_cmd::prelude::OutputOkExt;
+use chrono::{DateTime, Duration as ChronoDuration, NaiveDateTime, Utc};
 use getset::{Getters, MutGetters, Setters};
 use rslua::lexer::Lexer;
 use serde::{Deserialize, Serialize};
 use tempfile::NamedTempFile;
-use time::{format_description, Instant, OffsetDateTime};
 use url::Url;
 
 use crate::{
-    config::{Benchmark, BenchmarkBuilder},
+    benchmark::{Benchmark, BenchmarkBuilder},
     error::WrkError,
     result::{Variance, WrkResult, WrkResultBuilder},
     Result,
@@ -71,8 +71,7 @@ done = function(summary, latency, requests)
     ))
 end
 "#;
-const DATE_FORMAT: &str =
-    "[year]-[month]-[day]:[hour]:[minute]:[second]-[offset_hour sign:mandatory]:[offset_minute]:[offset_second]";
+const DATE_FORMAT: &str = "%Y-%m-%d-%H:%M:%S-%z";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum HistoryPeriod {
@@ -81,6 +80,7 @@ pub enum HistoryPeriod {
     Day,
     Week,
     Month,
+    Forever,
 }
 
 impl Default for HistoryPeriod {
@@ -90,20 +90,20 @@ impl Default for HistoryPeriod {
 }
 
 impl HistoryPeriod {
-    pub fn last(&self) -> OffsetDateTime {
-        let now = OffsetDateTime::now_utc();
+    pub fn last_valid_datapoint(&self) -> DateTime<Utc> {
+        let now = Utc::now();
         match self {
             Self::Last => now,
-            Self::Hour => now.sub(time::Duration::HOUR),
-            Self::Day => now.sub(time::Duration::DAY),
-            Self::Week => now.sub(time::Duration::WEEK),
-            Self::Month => now.sub(time::Duration::WEEK * 4),
+            Self::Hour => now.sub(ChronoDuration::hours(1)),
+            Self::Day => now.sub(ChronoDuration::days(1)),
+            Self::Week => now.sub(ChronoDuration::weeks(1)),
+            Self::Month => now.sub(ChronoDuration::weeks(4)),
+            Self::Forever => DateTime::from_utc(NaiveDateTime::from_timestamp(1, 0), Utc),
         }
     }
 }
 
 pub type Benchmarks = Vec<WrkResult>;
-pub type BenchmarksHistory = Vec<Benchmarks>;
 pub type Headers = HashMap<String, String>;
 
 /// Wrapper around Wrk enabling to run benchmarks, record historical data and plot graphs.
@@ -114,71 +114,44 @@ pub struct Wrk {
     #[getset(get = "pub", set = "pub", get_mut = "pub")]
     url: String,
     /// Set of benchmarks for the current instance.
-    #[builder(default = "self.default_benchmarks()")]
+    #[builder(default)]
     #[getset(get = "pub", set = "pub", get_mut = "pub")]
     benchmarks: Benchmarks,
     /// Historical benchmarks data, indexed by dates.
-    #[builder(default = "self.default_benchmarks()")]
+    #[builder(default)]
     #[getset(get = "pub", set = "pub", get_mut = "pub")]
     benchmarks_history: Benchmarks,
     /// Directory on disk where to store and read the historical benchmark data.
-    #[builder(default = "self.default_storage_dir()")]
+    #[builder(default = "Path::new(\".\").join(\".wrk-api-bench\")")]
     #[getset(get = "pub", set = "pub", get_mut = "pub")]
     history_dir: PathBuf,
     /// User defined LUA script to run through wrk.
     /// **NOTE: This script MUST not override the wrk function `done()` as it already
     /// overriden by this crate to allow wrk to spit out a parsable JSON output.
-    #[builder(default = "self.default_user_script()")]
+    #[builder(default)]
     #[getset(get = "pub", set = "pub", get_mut = "pub")]
     user_script: Option<PathBuf>,
     /// Header to add to the wrk request.
-    #[builder(default = "self.default_headers()")]
+    #[builder(default)]
     #[getset(get = "pub", set = "pub", get_mut = "pub")]
     headers: Headers,
     /// Method for the wrk request.
-    #[builder(default = "self.default_method()")]
+    #[builder(default = "String::from(\"GET\")")]
     #[getset(get = "pub", set = "pub", get_mut = "pub")]
     method: String,
     /// Body for the wrk request.
-    #[builder(default = "self.default_body()")]
+    #[builder(default)]
     #[getset(get = "pub", set = "pub", get_mut = "pub")]
     body: String,
     /// Max percentage of errors vs total request to conside a benchmark healthy.
-    #[builder(default = "self.default_max_error_percentage()")]
+    #[builder(default = "2")]
     #[getset(get = "pub", set = "pub", get_mut = "pub")]
     max_error_percentage: u8,
     /// Current benchmark date and time.
     #[serde(skip)]
-    #[builder(default = "self.default_benchmark_date()")]
+    #[builder(default)]
     #[getset(get = "pub", set = "pub", get_mut = "pub")]
-    benchmark_date: Option<String>,
-}
-
-impl WrkBuilder {
-    fn default_method(&self) -> String {
-        String::from("GET")
-    }
-    fn default_body(&self) -> String {
-        String::new()
-    }
-    fn default_storage_dir(&self) -> PathBuf {
-        Path::new(".").join(".wrk-api-bench")
-    }
-    fn default_benchmarks(&self) -> Benchmarks {
-        Benchmarks::new()
-    }
-    fn default_headers(&self) -> Headers {
-        Headers::new()
-    }
-    fn default_user_script(&self) -> Option<PathBuf> {
-        None
-    }
-    fn default_max_error_percentage(&self) -> u8 {
-        2
-    }
-    fn default_benchmark_date(&self) -> Option<String> {
-        None
-    }
+    benchmark_date: Option<DateTime<Utc>>,
 }
 
 impl Wrk {
@@ -294,9 +267,8 @@ end
                 );
             });
         }
-        let format = format_description::parse(DATE_FORMAT)?;
-        let date = OffsetDateTime::now_utc();
-        *self.benchmark_date_mut() = Some(date.format(&format)?);
+        let date = Utc::now();
+        *self.benchmark_date_mut() = Some(date);
         for benchmark in benchmarks {
             let mut run = match Command::new("wrk").args(self.wrk_args(benchmark)?).output() {
                 Ok(wrk) => {
@@ -319,11 +291,13 @@ end
                     WrkResult::fail(e.to_string())
                 }
             };
-            *run.date_mut() = date.format(&format)?;
+            *run.date_mut() = date;
+            *run.benchmark_mut() = benchmark.clone();
             println!("Current run: {:?}", run);
             self.benchmarks_mut().push(run);
         }
-        self.dump(&date.format(&format)?)?;
+        self.dump(date)?;
+        self.load(HistoryPeriod::Last, false)?;
         Ok(())
     }
 
@@ -332,8 +306,9 @@ end
         Ok(())
     }
 
-    fn dump(&self, date: &str) -> Result<()> {
-        let filename = format!("result.{}.json", date);
+    fn dump(&self, date: DateTime<Utc>) -> Result<()> {
+        let filename = format!("result.{}.json", date.format(DATE_FORMAT));
+        println!("Dumping on filename");
         let file = File::create(self.history_dir().join(&filename))?;
         let writer = BufWriter::new(file);
         println!("Writing current benchmark to {}", filename);
@@ -341,11 +316,7 @@ end
         Ok(())
     }
 
-    fn flatten<T>(&self, nested: Vec<Vec<T>>) -> Vec<T> {
-        nested.into_iter().flatten().collect()
-    }
-
-    fn load(&mut self, period: HistoryPeriod) -> Result<()> {
+    fn load(&mut self, period: HistoryPeriod, best: bool) -> Result<()> {
         if !self.history_dir().exists() {
             fs::create_dir(self.history_dir())?;
         }
@@ -354,30 +325,38 @@ end
             let metadata = fs::metadata(dir.path()).unwrap();
             metadata.modified().unwrap()
         });
-        let format = format_description::parse(DATE_FORMAT)?;
         let mut history = Benchmarks::new();
         if period == HistoryPeriod::Last {
             let file = File::open(paths.pop().unwrap().path())?;
             let mut reader = BufReader::new(file);
             history = serde_json::from_reader(&mut reader)?;
-            let date_str = history.pop().unwrap().date().to_string();
+            let benchmark = history.pop().unwrap();
             if let Some(benchmark_date) = self.benchmark_date() {
-                if benchmark_date == &date_str && !paths.is_empty() {
+                if benchmark_date == benchmark.date() && !paths.is_empty() {
                     let file = File::open(paths.pop().unwrap().path())?;
                     let mut reader = BufReader::new(file);
                     history = serde_json::from_reader(&mut reader)?;
+                    if best {
+                        let best = self.best_benchmark(&history)?;
+                        history = vec![best];
+                    }
                 }
             }
         } else {
             for path in paths {
                 if let Some(date_str) = path.file_name().to_string_lossy().split('.').nth(1) {
-                    let date = OffsetDateTime::parse(date_str, &format)?;
-                    if date >= period.last() {
+                    let date = DateTime::parse_from_str(date_str, DATE_FORMAT)?;
+                    if date >= period.last_valid_datapoint() {
                         let file = File::open(path.path())?;
                         let mut reader = BufReader::new(file);
-                        let benchmarks = serde_json::from_reader(&mut reader)?;
-                        let best = self.best_benchmark(&benchmarks)?;
-                        history.push(best);
+                        let mut benchmarks: Vec<_> = serde_json::from_reader(&mut reader)?;
+                        benchmarks.retain(|x| !self.benchmarks_history().contains(x));
+                        if best {
+                            let best = self.best_benchmark(&benchmarks)?;
+                            history.push(best);
+                        } else {
+                            history.append(&mut benchmarks);
+                        }
                     }
                 }
             }
@@ -395,8 +374,12 @@ end
                 .then((*a.requests() as i64).cmp(&(*b.requests() as i64)))
                 .then((*a.transfer_mb() as i64).cmp(&(*b.transfer_mb() as i64)))
         });
-        best.cloned()
-            .ok_or_else(|| WrkError::Stats("Unable to calculate best run in set".to_string()))
+        best.cloned().ok_or_else(|| {
+            WrkError::Stats(format!(
+                "Unable to calculate best in a set of {} elements",
+                benchmarks.len()
+            ))
+        })
     }
 
     fn best(&self) -> Result<WrkResult> {
@@ -411,7 +394,7 @@ end
         (new - old) / old * 100.0
     }
 
-    pub fn variance(&self) -> Result<Variance> {
+    pub fn variance(&mut self, period: HistoryPeriod) -> Result<Variance> {
         let new = self.best()?;
         let old = self.historical_best()?;
         Ok(Variance::new(new, old))
@@ -422,7 +405,7 @@ mod tests {
     use std::{thread, time::Duration};
 
     use super::*;
-    use crate::config::BenchmarkBuilder;
+    use crate::benchmark::BenchmarkBuilder;
 
     #[test]
     fn benchmark() {
@@ -432,12 +415,11 @@ mod tests {
             .unwrap();
         // wrk.bench_exponential(Some(Duration::from_secs(5))).unwrap();
         wrk.bench(&vec![BenchmarkBuilder::default()
-            .duration(Duration::from_secs(20))
+            .duration(Duration::from_secs(5))
             .build()
             .unwrap()])
             .unwrap();
-        wrk.load(HistoryPeriod::default()).unwrap();
         println!("MEEEEEEEEEEEEEEEE {:?}", wrk.benchmarks_history());
-        println!("MEEEEEEEEEEEEEEEE {}", wrk.variance().unwrap());
+        println!("MEEEEEEEEEEEEEEEE {}", wrk.variance(HistoryPeriod::Hour).unwrap());
     }
 }

@@ -1,22 +1,30 @@
 use std::fmt;
 
+use chrono::{DateTime, Utc};
 use getset::{Getters, MutGetters, Setters};
 use prettytable::{format, Attr, Cell, Row, Table};
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Debug, Default, Clone, Getters, Setters, MutGetters, Builder)]
+use crate::{Benchmark, BenchmarkBuilder};
+
+#[derive(Serialize, Deserialize, PartialEq, Debug, Clone, Getters, Setters, MutGetters, Builder)]
 pub struct WrkResult {
-    #[builder(default = "default_false()")]
-    #[serde(default = "default_false")]
+    #[builder(default)]
+    #[serde(default)]
     #[getset(get = "pub", set = "pub", get_mut = "pub")]
     success: bool,
     #[builder(default = "String::new()")]
     #[serde(default)]
     #[getset(get = "pub", set = "pub", get_mut = "pub")]
     error: String,
+    #[builder(default)]
     #[serde(default)]
     #[getset(get = "pub", set = "pub", get_mut = "pub")]
-    date: String,
+    benchmark: Benchmark,
+    #[builder(default = "Utc::now()")]
+    #[serde(default = "Utc::now")]
+    #[getset(get = "pub", set = "pub", get_mut = "pub")]
+    date: DateTime<Utc>,
     #[getset(get = "pub", set = "pub", get_mut = "pub")]
     requests: f64,
     #[getset(get = "pub", set = "pub", get_mut = "pub")]
@@ -47,8 +55,13 @@ pub struct WrkResult {
     errors_timeout: f64,
 }
 
-fn default_false() -> bool {
-    false
+impl Default for WrkResult {
+    fn default() -> Self {
+        WrkResult {
+            date: Utc::now(),
+            ..Default::default()
+        }
+    }
 }
 
 impl WrkResult {
@@ -85,7 +98,7 @@ impl Variance {
         let errors_status = Self::calculate(new.errors_status(), old.errors_status());
         let errors_timeout = Self::calculate(new.errors_timeout(), old.errors_timeout());
         let variance = WrkResultBuilder::default()
-            .date(new.date().to_string())
+            .date(*new.date())
             .requests(requests)
             .errors(errors)
             .successes(successes)

@@ -5,14 +5,14 @@ extern crate derive_builder;
 #[macro_use]
 extern crate log;
 
-mod config;
+mod benchmark;
 mod error;
 mod result;
 mod wrk;
 
-pub use config::Benchmark;
+pub use benchmark::{Benchmark, BenchmarkBuilder, BenchmarkBuilderError};
 pub use error::WrkError;
-pub use result::WrkResult;
-pub use wrk::Wrk;
+pub use result::{WrkResult, WrkResultBuilder, WrkResultBuilderError};
+pub use wrk::{Wrk, WrkBuilder, WrkBuilderError};
 
 pub(crate) type Result<T> = std::result::Result<T, WrkError>;

@@ -6,6 +6,9 @@ pub enum WrkError {
     #[error("Execution error: {0}")]
     Exec(String),
     // Custom errors
+    #[error("History error: {0}")]
+    History(String),
+    // Custom errors
     #[error("Lua error: {0}")]
     Lua(String),
     #[error("Statistics error: {0}")]
@@ -15,11 +18,7 @@ pub enum WrkError {
     #[error(transparent)]
     Serde(#[from] serde_json::Error),
     #[error(transparent)]
-    TimeFormat(#[from] time::error::Format),
-    #[error(transparent)]
-    TimeParse(#[from] time::error::Parse),
-    #[error(transparent)]
-    TimeDesc(#[from] time::error::InvalidFormatDescription),
+    Chrono(#[from] chrono::ParseError),
     #[error(transparent)]
     Url(#[from] url::ParseError),
     #[error(transparent)]
@@ -27,5 +26,5 @@ pub enum WrkError {
     #[error(transparent)]
     WrkResultBuilder(#[from] crate::result::WrkResultBuilderError),
     #[error(transparent)]
-    ConfigBuilder(#[from] crate::config::BenchmarkBuilderError),
+    BenchmarkBuilder(#[from] crate::benchmark::BenchmarkBuilderError),
 }
