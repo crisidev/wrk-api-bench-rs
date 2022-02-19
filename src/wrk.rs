@@ -20,7 +20,7 @@ use url::Url;
 use crate::{
     config::{Benchmark, BenchmarkBuilder},
     error::WrkError,
-    result::{Variance, WrkResultBuilder, WrkResult},
+    result::{Variance, WrkResult, WrkResultBuilder},
     Result,
 };
 
