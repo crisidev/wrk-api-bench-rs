@@ -1,10 +1,12 @@
 use std::{
     env,
-    fs::File,
+    fs::{self, File},
     io::{BufReader, Read, Write},
     path::{Path, PathBuf},
 };
 
+use assert_cmd::prelude::OutputOkExt;
+use getset::{Getters, MutGetters, Setters};
 use rslua::lexer::Lexer;
 use tempfile::NamedTempFile;
 
@@ -58,10 +60,11 @@ done = function(summary, latency, requests)
 end
 "#;
 
+#[derive(Debug)]
 pub struct LuaScript {}
 
 impl LuaScript {
-    fn lua_script_from_config(&self, uri: &str, method: &str, headers: &Headers, body: &str) -> Result<PathBuf> {
+    fn lua_script_from_config(&mut self, uri: &str, method: &str, headers: &Headers, body: &str) -> Result<String> {
         let request = format!(
             r#"
 -- The request() function is called by wrk on all requests
@@ -80,14 +83,10 @@ end
             uri
         );
         let buffer = request + LUA_DEFAULT_DONE_FUNCTION;
-        let mut tmpfile = NamedTempFile::new()?;
-        tmpfile.write_all(buffer.as_bytes())?;
-        let result = tmpfile.path().to_path_buf();
-        tmpfile.keep().unwrap();
-        Ok(result)
+        Ok(buffer)
     }
 
-    fn lua_script_from_user(&self, lua_script: &Path) -> Result<PathBuf> {
+    fn lua_script_from_user(&mut self, lua_script: &Path) -> Result<String> {
         let file = File::open(lua_script)?;
         let mut reader = BufReader::new(file);
         let mut buffer = String::new();
@@ -95,9 +94,7 @@ end
         let mut lexer = Lexer::new();
         let tokens = lexer.run(&buffer).map_err(|e| WrkError::Lua(format!("{:?}", e)))?;
         let buffer = buffer + LUA_DEFAULT_DONE_FUNCTION;
-        let mut tmpfile = NamedTempFile::new()?;
-        tmpfile.write_all(buffer.as_bytes())?;
-        Ok(tmpfile.path().to_path_buf())
+        Ok(buffer)
     }
 
     fn lua_headers(&self, headers: &Headers) -> Result<String> {
@@ -109,14 +106,15 @@ end
     }
 
     pub fn render(
+        script_file: &mut NamedTempFile,
         user_script: Option<&PathBuf>,
         uri: &str,
         method: &str,
         headers: &Headers,
         body: &str,
-    ) -> Result<PathBuf> {
-        let this = Self {};
-        match user_script {
+    ) -> Result<()> {
+        let mut this = Self {};
+        let script = match user_script {
             Some(lua_script) => {
                 if !lua_script.exists() {
                     error!(
@@ -124,12 +122,14 @@ end
                         env::current_dir().expect("unable to get current directory").display(),
                         lua_script.display()
                     );
-                    Err(WrkError::Lua("Wrk Lua file not found".to_string()))
+                    return Err(WrkError::Lua("Wrk Lua file not found".to_string()));
                 } else {
-                    Ok(this.lua_script_from_user(&lua_script)?)
+                    this.lua_script_from_user(&lua_script)?
                 }
             }
-            None => Ok(this.lua_script_from_config(uri, method, headers, body)?),
-        }
+            None => this.lua_script_from_config(uri, method, headers, body)?,
+        };
+        script_file.write_all(script.as_bytes())?;
+        Ok(())
     }
 }

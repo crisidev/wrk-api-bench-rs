@@ -8,9 +8,14 @@ pub enum WrkError {
     // Custom errors
     #[error("History error: {0}")]
     History(String),
+    #[error("Bitmap plotting error: {0}")]
+    Bitmap(String),
     // Custom errors
     #[error("Lua error: {0}")]
     Lua(String),
+    // Custom errors
+    #[error("Plot error: {0}")]
+    Plot(String),
     #[error("Statistics error: {0}")]
     Stats(String),
     #[error(transparent)]
@@ -21,6 +26,8 @@ pub enum WrkError {
     Chrono(#[from] chrono::ParseError),
     #[error(transparent)]
     Url(#[from] url::ParseError),
+    #[error(transparent)]
+    Tempfile(#[from] tempfile::PersistError),
     #[error(transparent)]
     WrkBuilder(#[from] crate::wrk::WrkBuilderError),
     #[error(transparent)]

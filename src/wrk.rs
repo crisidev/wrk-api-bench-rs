@@ -11,13 +11,14 @@ use std::{
 use chrono::{DateTime, Duration as ChronoDuration, NaiveDateTime, Utc};
 use getset::{Getters, MutGetters, Setters};
 use serde::{Deserialize, Serialize};
+use tempfile::NamedTempFile;
 use url::Url;
 
 use crate::{
     benchmark::{Benchmark, BenchmarkBuilder},
     error::WrkError,
     result::{Variance, WrkResult},
-    LuaScript, Result,
+    Gnuplot, LuaScript, Result,
 };
 
 const DATE_FORMAT: &str = "%Y-%m-%d-%H:%M:%S-%z";
@@ -104,15 +105,7 @@ pub struct Wrk {
 }
 
 impl Wrk {
-    fn wrk_args(&self, benchmark: &Benchmark) -> Result<Vec<String>> {
-        let url = Url::parse(self.url())?;
-        let lua_script = LuaScript::render(
-            self.user_script().as_ref(),
-            url.path(),
-            self.method(),
-            self.headers(),
-            self.body(),
-        )?;
+    fn wrk_args(&self, benchmark: &Benchmark, url: &Url, lua_script: &Path) -> Result<Vec<String>> {
         Ok(vec![
             "-t".to_string(),
             benchmark.threads().to_string(),
@@ -159,8 +152,21 @@ impl Wrk {
         }
         let date = Utc::now();
         *self.benchmark_date_mut() = Some(date);
+        let url = Url::parse(self.url())?;
+        let mut script_file = NamedTempFile::new()?;
+        LuaScript::render(
+            &mut script_file,
+            self.user_script().as_ref(),
+            url.path(),
+            self.method(),
+            self.headers(),
+            self.body(),
+        )?;
         for benchmark in benchmarks {
-            let mut run = match Command::new("wrk").args(self.wrk_args(benchmark)?).output() {
+            let mut run = match Command::new("wrk")
+                .args(self.wrk_args(benchmark, &url, script_file.path())?)
+                .output()
+            {
                 Ok(wrk) => {
                     let output = String::from_utf8_lossy(&wrk.stdout);
                     let error = String::from_utf8_lossy(&wrk.stderr);
@@ -187,7 +193,6 @@ impl Wrk {
             self.benchmarks_mut().push(run);
         }
         self.dump(date)?;
-        self.load(HistoryPeriod::Last, false)?;
         Ok(())
     }
 
@@ -198,7 +203,6 @@ impl Wrk {
 
     fn dump(&self, date: DateTime<Utc>) -> Result<()> {
         let filename = format!("result.{}.json", date.format(DATE_FORMAT));
-        println!("Dumping on filename");
         let file = File::create(self.history_dir().join(&filename))?;
         let writer = BufWriter::new(file);
         println!("Writing current benchmark to {}", filename);
@@ -230,6 +234,10 @@ impl Wrk {
                         let best = self.best_benchmark(&history)?;
                         history = vec![best];
                     }
+                } else {
+                    return Err(WrkError::History(
+                        "Unable to load history with a single measurement".to_string(),
+                    ));
                 }
             }
         } else {
@@ -284,10 +292,21 @@ impl Wrk {
         (new - old) / old * 100.0
     }
 
+    pub fn all_benchmarks(&self) -> Benchmarks {
+        let mut history = self.benchmarks_history().clone();
+        history.append(&mut self.benchmarks().clone());
+        history
+    }
+
     pub fn variance(&mut self, period: HistoryPeriod) -> Result<Variance> {
+        self.load(period, false)?;
         let new = self.best()?;
         let old = self.historical_best()?;
         Ok(Variance::new(new, old))
+    }
+
+    pub fn plot(&self, title: &str, output: &Path, benchmarks: &Benchmarks) -> Result<()> {
+        Gnuplot::new(title, output).plot(benchmarks)
     }
 }
 
@@ -303,13 +322,14 @@ mod tests {
             .url("http://localhost:13734/pokemon-species/pikachu".to_string())
             .build()
             .unwrap();
-        // wrk.bench_exponential(Some(Duration::from_secs(5))).unwrap();
+        // wrk.bench_exponential(Some(Duration::from_secs(10))).unwrap();
         wrk.bench(&vec![BenchmarkBuilder::default()
             .duration(Duration::from_secs(5))
             .build()
             .unwrap()])
             .unwrap();
-        println!("MEEEEEEEEEEEEEEEE {:?}", wrk.benchmarks_history());
-        println!("MEEEEEEEEEEEEEEEE {}", wrk.variance(HistoryPeriod::Hour).unwrap());
+        wrk.load(HistoryPeriod::Day, false).unwrap();
+        wrk.plot("Wrk Weeeeeee", Path::new("./some.png"), &wrk.all_benchmarks())
+            .unwrap();
     }
 }
