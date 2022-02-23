@@ -1,7 +1,14 @@
 [package]
 name = "wrk-api-bench"
-version = "0.1.0"
+version = "0.0.1"
 edition = "2021"
+description = "Library to perform HTTP benchmarks using wrk and produce useful performance regression information"
+homepage    = "https://bheisler.github.io/criterion.rs/book/index.html"
+repository  = "https://github.com/bheisler/criterion.rs"
+readme      = "README.md"
+keywords    = ["wrk", "benchmark", "profiling"]
+categories  = ["development-tools::profiling"]
+license     = "Apache-2.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

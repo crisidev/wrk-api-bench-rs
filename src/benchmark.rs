@@ -43,8 +43,4 @@ impl Benchmark {
             duration: Duration::from_secs(duration),
         }
     }
-
-    pub fn to_key(&self) -> String {
-        format!("{}-{}-{}", self.threads, self.connections, self.duration.as_secs())
-    }
 }

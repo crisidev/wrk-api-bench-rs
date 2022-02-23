@@ -319,17 +319,18 @@ mod tests {
     #[test]
     fn benchmark() {
         let mut wrk = WrkBuilder::default()
-            .url("http://localhost:13734/pokemon-species/pikachu".to_string())
+            .url("http://localhost:13734/some".to_string())
             .build()
             .unwrap();
-        // wrk.bench_exponential(Some(Duration::from_secs(10))).unwrap();
-        wrk.bench(&vec![BenchmarkBuilder::default()
-            .duration(Duration::from_secs(5))
-            .build()
-            .unwrap()])
-            .unwrap();
+        // wrk.bench_exponential(Some(Duration::from_secs(30))).unwrap();
+        // println!("{}", wrk.variance(HistoryPeriod::Last).unwrap());
+        // wrk.bench(&vec![BenchmarkBuilder::default()
+        //     .duration(Duration::from_secs(5))
+        //     .build()
+        //     .unwrap()])
+        //     .unwrap();
         wrk.load(HistoryPeriod::Day, false).unwrap();
-        wrk.plot("Wrk Weeeeeee", Path::new("./some.png"), &wrk.all_benchmarks())
-            .unwrap();
+        // wrk.plot("Wrk Weeeeeee", Path::new("./some.png"), &wrk.all_benchmarks())
+        // .unwrap();
     }
 }
