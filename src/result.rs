@@ -25,41 +25,71 @@ pub struct WrkResult {
     #[serde(default = "Utc::now")]
     #[getset(get = "pub", set = "pub", get_mut = "pub")]
     date: DateTime<Utc>,
+    #[builder(default = "0.0")]
     #[getset(get = "pub", set = "pub", get_mut = "pub")]
     requests: f64,
+    #[builder(default = "0.0")]
     #[getset(get = "pub", set = "pub", get_mut = "pub")]
     errors: f64,
+    #[builder(default = "0.0")]
     #[getset(get = "pub", set = "pub", get_mut = "pub")]
     successes: f64,
+    #[builder(default = "0.0")]
     #[getset(get = "pub", set = "pub", get_mut = "pub")]
     requests_sec: f64,
+    #[builder(default = "0.0")]
     #[getset(get = "pub", set = "pub", get_mut = "pub")]
     avg_latency_ms: f64,
+    #[builder(default = "0.0")]
     #[getset(get = "pub", set = "pub", get_mut = "pub")]
     min_latency_ms: f64,
+    #[builder(default = "0.0")]
     #[getset(get = "pub", set = "pub", get_mut = "pub")]
     max_latency_ms: f64,
+    #[builder(default = "0.0")]
     #[getset(get = "pub", set = "pub", get_mut = "pub")]
     stdev_latency_ms: f64,
+    #[builder(default = "0.0")]
     #[getset(get = "pub", set = "pub", get_mut = "pub")]
     transfer_mb: f64,
+    #[builder(default = "0.0")]
     #[getset(get = "pub", set = "pub", get_mut = "pub")]
     errors_connect: f64,
+    #[builder(default = "0.0")]
     #[getset(get = "pub", set = "pub", get_mut = "pub")]
     errors_read: f64,
+    #[builder(default = "0.0")]
     #[getset(get = "pub", set = "pub", get_mut = "pub")]
     errors_write: f64,
+    #[builder(default = "0.0")]
     #[getset(get = "pub", set = "pub", get_mut = "pub")]
     errors_status: f64,
+    #[builder(default = "0.0")]
     #[getset(get = "pub", set = "pub", get_mut = "pub")]
     errors_timeout: f64,
 }
 
 impl Default for WrkResult {
     fn default() -> Self {
-        WrkResult {
+        Self {
+            success: false,
+            error: String::new(),
+            benchmark: Benchmark::default(),
             date: Utc::now(),
-            ..Default::default()
+            requests: 0.0,
+            errors: 0.0,
+            successes: 0.0,
+            requests_sec: 0.0,
+            avg_latency_ms: 0.0,
+            min_latency_ms: 0.0,
+            max_latency_ms: 0.0,
+            stdev_latency_ms: 0.0,
+            transfer_mb: 0.0,
+            errors_connect: 0.0,
+            errors_read: 0.0,
+            errors_write: 0.0,
+            errors_status: 0.0,
+            errors_timeout: 0.0,
         }
     }
 }

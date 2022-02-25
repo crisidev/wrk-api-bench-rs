@@ -17,7 +17,7 @@ use url::Url;
 use crate::{
     benchmark::{Benchmark, BenchmarkBuilder},
     error::WrkError,
-    result::{Variance, WrkResult},
+    result::{Variance, WrkResult, WrkResultBuilder},
     Gnuplot, LuaScript, Result,
 };
 
@@ -120,6 +120,7 @@ impl Wrk {
     }
 
     fn wrk_result(&self, wrk_json: &str) -> WrkResult {
+        println!("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA {}", wrk_json);
         match serde_json::from_str::<WrkResult>(wrk_json) {
             Ok(mut run) => {
                 let error_percentage = run.errors() / 100.0 * run.requests();
@@ -192,6 +193,8 @@ impl Wrk {
             println!("Current run: {:?}", run);
             self.benchmarks_mut().push(run);
         }
+        println!("SCRIPT: {}", script_file.path().display());
+        script_file.keep()?;
         self.dump(date)?;
         Ok(())
     }
@@ -310,26 +313,84 @@ impl Wrk {
     }
 }
 
+// #[cfg(test)]
+// mod tests {
+//     use std::{thread, time::Duration};
+
+//     use super::*;
+//     use crate::benchmark::BenchmarkBuilder;
+
+//     #[test]
+//     fn benchmark() {
+//         let mut wrk = WrkBuilder::default()
+//             .url("http://localhost:13734/some".to_string())
+//             .build()
+//             .unwrap();
+//         // wrk.bench_exponential(Some(Duration::from_secs(30))).unwrap();
+//         // println!("{}", wrk.variance(HistoryPeriod::Last).unwrap());
+//         wrk.bench(&vec![BenchmarkBuilder::default()
+//             .duration(Duration::from_secs(5))
+//             .build()
+//             .unwrap()])
+//             .unwrap();
+//         wrk.load(HistoryPeriod::Day, false).unwrap();
+//         // wrk.plot("Wrk Weeeeeee", Path::new("./some.png"), &wrk.all_benchmarks())
+//         // .unwrap();
+//     }
+// }
+
+#[cfg(test)]
 mod tests {
-    use std::{thread, time::Duration};
+    use std::{net::SocketAddr, thread, time::Duration};
 
     use super::*;
     use crate::benchmark::BenchmarkBuilder;
+    use axum::{
+        http::StatusCode,
+        response::IntoResponse,
+        routing::{get, post},
+        Json, Router,
+    };
+    use http::Request;
+    use hyper::Body;
 
-    #[test]
-    fn benchmark() {
+    async fn server() {
+        let app = Router::new().route("/", get(|| async { "Hello, world!" }));
+
+        let addr = SocketAddr::from(([127, 0, 0, 1], 13734));
+        println!("server listening on {}", addr);
+        axum::Server::bind(&addr).serve(app.into_make_service()).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn benchmark() {
+        tokio::spawn(server());
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        let client = hyper::Client::new();
+
+        let response = client
+            .request(
+                Request::builder()
+                    .uri("http://127.0.0.1:13734/")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+
         let mut wrk = WrkBuilder::default()
-            .url("http://localhost:13734/some".to_string())
+            .url("http://127.0.0.1:13734".to_string())
             .build()
             .unwrap();
         // wrk.bench_exponential(Some(Duration::from_secs(30))).unwrap();
-        // println!("{}", wrk.variance(HistoryPeriod::Last).unwrap());
-        // wrk.bench(&vec![BenchmarkBuilder::default()
-        //     .duration(Duration::from_secs(5))
-        //     .build()
-        //     .unwrap()])
-        //     .unwrap();
-        wrk.load(HistoryPeriod::Day, false).unwrap();
+        wrk.bench(&vec![BenchmarkBuilder::default()
+            .duration(Duration::from_secs(5))
+            .build()
+            .unwrap()])
+            .unwrap();
+        // println!("{}", wrk.variance(HistoryPeriod::Hour).unwrap());
+        // wrk.load(HistoryPeriod::Day, false).unwrap();
         // wrk.plot("Wrk Weeeeeee", Path::new("./some.png"), &wrk.all_benchmarks())
         // .unwrap();
     }

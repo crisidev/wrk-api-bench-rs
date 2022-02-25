@@ -26,20 +26,20 @@ done = function(summary, latency, requests)
     io.write("JSON")
     io.write(string.format(
         [[{
-    "requests": %d,
-    "errors": %d,
-    "successes": %d,
-    "requests_sec": %d,
+    "requests": %.2f,
+    "errors": %.2f,
+    "successes": %.2f,
+    "requests_sec": %.2f,
     "avg_latency_ms": %.2f,
     "min_latency_ms": %.2f,
     "max_latency_ms": %.2f,
     "stdev_latency_ms": %.2f,
-    "transfer_mb": %.d,
-    "errors_connect": %d,
-    "errors_read": %d,
-    "errors_write": %d,
-    "errors_status": %d,
-    "errors_timeout": %d
+    "transfer_mb": %.2f,
+    "errors_connect": %.2f,
+    "errors_read": %.2f,
+    "errors_write": %.2f,
+    "errors_status": %.2f,
+    "errors_timeout": %.2f
 }
 ]],
         summary.requests,

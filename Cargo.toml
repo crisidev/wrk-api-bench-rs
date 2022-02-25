@@ -1,10 +1,10 @@
 [package]
 name = "wrk-api-bench"
-version = "0.0.1"
+version = "0.0.2"
 edition = "2021"
 description = "Library to perform HTTP benchmarks using wrk and produce useful performance regression information"
-homepage    = "https://bheisler.github.io/criterion.rs/book/index.html"
-repository  = "https://github.com/bheisler/criterion.rs"
+homepage    = "https://github.com/crisidev/wrk-api-bench-rs"
+repository  = "https://github.com/crisidev/wrk-api-bench-rs"
 readme      = "README.md"
 keywords    = ["wrk", "benchmark", "profiling"]
 categories  = ["development-tools::profiling"]
@@ -29,3 +29,8 @@ chrono = { version = "0.4", features = ["serde"]}
 tokio = { version = "1", features = ["full"] }
 tokio-serde-json = "0.3"
 url = "2"
+
+[dev-dependencies]
+axum = "0.4"
+http = "0.2"
+hyper = {version = "0.14", features = ["client"]}
