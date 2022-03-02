@@ -17,6 +17,6 @@ pub use error::WrkError;
 pub use lua::LuaScript;
 pub use plot::Gnuplot;
 pub use result::{WrkResult, WrkResultBuilder, WrkResultBuilderError};
-pub use wrk::{Benchmarks, Headers, Wrk, WrkBuilder, WrkBuilderError};
+pub use wrk::{Benchmarks, Headers, HistoryPeriod, Wrk, WrkBuilder, WrkBuilderError};
 
 pub(crate) type Result<T> = std::result::Result<T, WrkError>;
