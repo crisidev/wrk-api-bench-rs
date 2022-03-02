@@ -112,7 +112,6 @@ pub struct Variance {
 
 impl Variance {
     pub fn new(new: WrkResult, old: WrkResult) -> Self {
-        println!("{} {}", new.requests_sec(), old.requests_sec());
         let requests_sec = Self::calculate(new.requests_sec(), old.requests_sec());
         let requests = Self::calculate(new.requests(), old.requests());
         let successes = Self::calculate(new.successes(), old.successes());
@@ -150,6 +149,96 @@ impl Variance {
 
     fn calculate(new: &f64, old: &f64) -> f64 {
         (new - old) / old * 100.0
+    }
+
+    pub fn to_markdown(&self) -> String {
+        let mut result =
+            String::from("### Rust Wrk benchmark variance report:\n\n|Measurement|Variance|Current|Old|\n|-|-|-|-|\n");
+        result += &format!(
+            "|Requests/sec|{:.2}%|{}|{}|\n",
+            self.variance.requests_sec(),
+            self.new.requests_sec(),
+            self.old.requests_sec()
+        );
+        result += &format!(
+            "|Total requests|{:.2}%|{}|{}|\n",
+            self.variance.requests(),
+            self.new.requests(),
+            self.old.requests()
+        );
+        result += &format!(
+            "|Total errors|{:.2}%|{}|{}|\n",
+            self.variance.errors(),
+            self.new.errors(),
+            self.old.errors()
+        );
+        result += &format!(
+            "|Total successes|{:.2}%|{}|{}|\n",
+            self.variance.successes(),
+            self.new.successes(),
+            self.old.successes()
+        );
+        result += &format!(
+            "|Average latency ms|{:.2}%|{}|{}|\n",
+            self.variance.avg_latency_ms(),
+            self.new.avg_latency_ms(),
+            self.old.avg_latency_ms()
+        );
+        result += &format!(
+            "|Minimum latency ms|{:.2}%|{}|{}|\n",
+            self.variance.min_latency_ms(),
+            self.new.min_latency_ms(),
+            self.old.min_latency_ms()
+        );
+        result += &format!(
+            "|Maximum latency ms|{:.2}%|{}|{}|\n",
+            self.variance.max_latency_ms(),
+            self.new.max_latency_ms(),
+            self.old.max_latency_ms()
+        );
+        result += &format!(
+            "|Stdev latency ms|{:.2}%|{}|{}|\n",
+            self.variance.stdev_latency_ms(),
+            self.new.stdev_latency_ms(),
+            self.old.stdev_latency_ms()
+        );
+        result += &format!(
+            "|Transfer Mb|{:.2}%|{}|{}|\n",
+            self.variance.transfer_mb(),
+            self.new.transfer_mb(),
+            self.old.transfer_mb()
+        );
+        result += &format!(
+            "|Connect errors|{:.2}%|{}|{}|\n",
+            self.variance.errors_connect(),
+            self.new.errors_connect(),
+            self.old.errors_connect()
+        );
+        result += &format!(
+            "|Read errors|{:.2}%|{}|{}|\n",
+            self.variance.errors_read(),
+            self.new.errors_read(),
+            self.old.errors_read()
+        );
+        result += &format!(
+            "|Write errors|{:.2}%|{}|{}|\n",
+            self.variance.errors_write(),
+            self.new.errors_write(),
+            self.old.errors_write()
+        );
+        result += &format!(
+            "|Status errors (not 2xx/3xx)|{:.2}%|{}|{}|\n",
+            self.variance.errors_status(),
+            self.new.errors_status(),
+            self.old.errors_status()
+        );
+        result += &format!(
+            "|Timeout errors|{:.2}%|{}|{}|\n",
+            self.variance.errors_timeout(),
+            self.new.errors_timeout(),
+            self.old.errors_timeout()
+        );
+        result
     }
 }
 

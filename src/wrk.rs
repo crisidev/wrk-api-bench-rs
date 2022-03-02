@@ -63,6 +63,11 @@ pub struct Wrk {
     /// IE: http://localhost:1234/some/uri.
     #[getset(get = "pub", set = "pub", get_mut = "pub")]
     url: String,
+    /// Wrk timeout in seconds
+    #[serde(skip)]
+    #[builder(default = "1")]
+    #[getset(get = "pub", set = "pub", get_mut = "pub")]
+    timeout: u8,
     /// Set of benchmarks for the current instance.
     #[builder(default)]
     #[getset(get = "pub", set = "pub", get_mut = "pub")]
@@ -113,6 +118,8 @@ impl Wrk {
             benchmark.connections().to_string(),
             "-d".to_string(),
             format!("{}s", benchmark.duration().as_secs()),
+            "--timeout".to_string(),
+            format!("{}s", self.timeout()),
             "-s".to_string(),
             lua_script.to_string_lossy().to_string(),
             url.to_string(),
