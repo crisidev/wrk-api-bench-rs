@@ -127,7 +127,6 @@ impl Wrk {
     }
 
     fn wrk_result(&self, wrk_json: &str) -> WrkResult {
-        println!("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA {}", wrk_json);
         match serde_json::from_str::<WrkResult>(wrk_json) {
             Ok(mut run) => {
                 let error_percentage = run.errors() / 100.0 * run.requests();
@@ -197,10 +196,8 @@ impl Wrk {
             };
             *run.date_mut() = date;
             *run.benchmark_mut() = benchmark.clone();
-            println!("Current run: {:?}", run);
             self.benchmarks_mut().push(run);
         }
-        println!("SCRIPT: {}", script_file.path().display());
         script_file.keep()?;
         self.dump(date)?;
         Ok(())

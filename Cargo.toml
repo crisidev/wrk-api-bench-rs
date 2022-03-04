@@ -1,6 +1,6 @@
 [package]
 name = "wrk-api-bench"
-version = "0.0.5"
+version = "0.0.6"
 edition = "2021"
 description = "Library to perform HTTP benchmarks using wrk and produce useful performance regression information"
 homepage    = "https://github.com/crisidev/wrk-api-bench-rs"

@@ -152,9 +152,14 @@ impl Variance {
     }
 
     pub fn to_github_markdown(&self) -> String {
-        let mut result = String::from(
-            "### Rust Wrk benchmark variance report:\\n\\n|Measurement|Variance|Current|Old|\\n|-|-|-|-|\\n",
+        let mut result = String::from("### Rust Wrk benchmark variance report:\\n");
+        result += &format!(
+            "#### Duration: {} sec, Connections: {}, Threads: {}\\n\\n",
+            self.new.benchmark().duration().as_secs(),
+            self.new.benchmark().connections(),
+            self.new.benchmark().threads()
         );
+        result += "|Measurement|Variance|Current|Old|\\n|-|-|-|-|\\n";
         result += &format!(
             "|Requests/sec|{:.2}%|{}|{}|\\n",
             self.variance.requests_sec(),
