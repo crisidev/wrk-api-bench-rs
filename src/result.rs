@@ -104,13 +104,13 @@ impl WrkResult {
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct Variance {
-    pub variance: WrkResult,
+pub struct Deviation {
+    pub deviation: WrkResult,
     pub new: WrkResult,
     pub old: WrkResult,
 }
 
-impl Variance {
+impl Deviation {
     pub fn new(new: WrkResult, old: WrkResult) -> Self {
         let requests_sec = Self::calculate(new.requests_sec(), old.requests_sec());
         let requests = Self::calculate(new.requests(), old.requests());
@@ -126,7 +126,7 @@ impl Variance {
         let errors_write = Self::calculate(new.errors_write(), old.errors_write());
         let errors_status = Self::calculate(new.errors_status(), old.errors_status());
         let errors_timeout = Self::calculate(new.errors_timeout(), old.errors_timeout());
-        let variance = WrkResultBuilder::default()
+        let deviation = WrkResultBuilder::default()
             .date(*new.date())
             .requests(requests)
             .errors(errors)
@@ -144,7 +144,7 @@ impl Variance {
             .errors_timeout(errors_timeout)
             .build()
             .unwrap();
-        Self { variance, new, old }
+        Self { deviation, new, old }
     }
 
     fn calculate(new: &f64, old: &f64) -> f64 {
@@ -152,95 +152,95 @@ impl Variance {
     }
 
     pub fn to_github_markdown(&self) -> String {
-        let mut result = String::from("### Rust Wrk benchmark variance report:\\n");
+        let mut result = String::from("### Rust Wrk benchmark report:\\n");
         result += &format!(
             "#### Duration: {} sec, Connections: {}, Threads: {}\\n\\n",
             self.new.benchmark().duration().as_secs(),
             self.new.benchmark().connections(),
             self.new.benchmark().threads()
         );
-        result += "|Measurement|Variance|Current|Old|\\n|-|-|-|-|\\n";
+        result += "|Measurement|Deviation|Current|Old|\\n|-|-|-|-|\\n";
         result += &format!(
             "|Requests/sec|{:.2}%|{}|{}|\\n",
-            self.variance.requests_sec(),
+            self.deviation.requests_sec(),
             self.new.requests_sec(),
             self.old.requests_sec()
         );
         result += &format!(
             "|Total requests|{:.2}%|{}|{}|\\n",
-            self.variance.requests(),
+            self.deviation.requests(),
             self.new.requests(),
             self.old.requests()
         );
         result += &format!(
             "|Total errors|{:.2}%|{}|{}|\\n",
-            self.variance.errors(),
+            self.deviation.errors(),
             self.new.errors(),
             self.old.errors()
         );
         result += &format!(
             "|Total successes|{:.2}%|{}|{}|\\n",
-            self.variance.successes(),
+            self.deviation.successes(),
             self.new.successes(),
             self.old.successes()
         );
         result += &format!(
             "|Average latency ms|{:.2}%|{}|{}|\\n",
-            self.variance.avg_latency_ms(),
+            self.deviation.avg_latency_ms(),
             self.new.avg_latency_ms(),
             self.old.avg_latency_ms()
         );
         result += &format!(
             "|Minimum latency ms|{:.2}%|{}|{}|\\n",
-            self.variance.min_latency_ms(),
+            self.deviation.min_latency_ms(),
             self.new.min_latency_ms(),
             self.old.min_latency_ms()
         );
         result += &format!(
             "|Maximum latency ms|{:.2}%|{}|{}|\\n",
-            self.variance.max_latency_ms(),
+            self.deviation.max_latency_ms(),
             self.new.max_latency_ms(),
             self.old.max_latency_ms()
         );
         result += &format!(
             "|Stdev latency ms|{:.2}%|{}|{}|\\n",
-            self.variance.stdev_latency_ms(),
+            self.deviation.stdev_latency_ms(),
             self.new.stdev_latency_ms(),
             self.old.stdev_latency_ms()
         );
         result += &format!(
             "|Transfer Mb|{:.2}%|{}|{}|\\n",
-            self.variance.transfer_mb(),
+            self.deviation.transfer_mb(),
             self.new.transfer_mb(),
             self.old.transfer_mb()
         );
         result += &format!(
             "|Connect errors|{:.2}%|{}|{}|\\n",
-            self.variance.errors_connect(),
+            self.deviation.errors_connect(),
             self.new.errors_connect(),
             self.old.errors_connect()
         );
         result += &format!(
             "|Read errors|{:.2}%|{}|{}|\\n",
-            self.variance.errors_read(),
+            self.deviation.errors_read(),
             self.new.errors_read(),
             self.old.errors_read()
         );
         result += &format!(
             "|Write errors|{:.2}%|{}|{}|\\n",
-            self.variance.errors_write(),
+            self.deviation.errors_write(),
             self.new.errors_write(),
             self.old.errors_write()
         );
         result += &format!(
             "|Status errors (not 2xx/3xx)|{:.2}%|{}|{}|\\n",
-            self.variance.errors_status(),
+            self.deviation.errors_status(),
             self.new.errors_status(),
             self.old.errors_status()
         );
         result += &format!(
             "|Timeout errors|{:.2}%|{}|{}|\\n",
-            self.variance.errors_timeout(),
+            self.deviation.errors_timeout(),
             self.new.errors_timeout(),
             self.old.errors_timeout()
         );
@@ -248,100 +248,100 @@ impl Variance {
     }
 }
 
-impl fmt::Display for Variance {
+impl fmt::Display for Deviation {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut table = Table::new();
         table.set_format(*format::consts::FORMAT_CLEAN);
         table.add_row(Row::new(vec![
             Cell::new("Measurement").with_style(Attr::Bold),
-            Cell::new("Variance").with_style(Attr::Bold),
+            Cell::new("Deviation").with_style(Attr::Bold),
             Cell::new("Current").with_style(Attr::Bold),
             Cell::new("Old").with_style(Attr::Bold),
         ]));
         table.add_row(Row::new(vec![
             Cell::new("Requests per second").with_style(Attr::Bold),
-            Cell::new(&format!("{:.2}%", self.variance.requests_sec())),
+            Cell::new(&format!("{:.2}%", self.deviation.requests_sec())),
             Cell::new(&self.new.requests_sec().to_string()),
             Cell::new(&self.old.requests_sec().to_string()),
         ]));
         table.add_row(Row::new(vec![
             Cell::new("Total requests").with_style(Attr::Bold),
-            Cell::new(&format!("{:.2}%", self.variance.requests())),
+            Cell::new(&format!("{:.2}%", self.deviation.requests())),
             Cell::new(&self.new.requests().to_string()),
             Cell::new(&self.old.requests().to_string()),
         ]));
         table.add_row(Row::new(vec![
             Cell::new("Total errors").with_style(Attr::Bold),
-            Cell::new(&format!("{:.2}%", self.variance.errors())),
+            Cell::new(&format!("{:.2}%", self.deviation.errors())),
             Cell::new(&self.new.errors().to_string()),
             Cell::new(&self.old.errors().to_string()),
         ]));
         table.add_row(Row::new(vec![
             Cell::new("Total successes").with_style(Attr::Bold),
-            Cell::new(&format!("{:.2}%", self.variance.successes())),
+            Cell::new(&format!("{:.2}%", self.deviation.successes())),
             Cell::new(&self.new.successes().to_string()),
             Cell::new(&self.old.successes().to_string()),
         ]));
         table.add_row(Row::new(vec![
             Cell::new("Average latency ms").with_style(Attr::Bold),
-            Cell::new(&format!("{:.2}%", self.variance.avg_latency_ms())),
+            Cell::new(&format!("{:.2}%", self.deviation.avg_latency_ms())),
             Cell::new(&self.new.avg_latency_ms().to_string()),
             Cell::new(&self.old.avg_latency_ms().to_string()),
         ]));
         table.add_row(Row::new(vec![
             Cell::new("Minimum latency ms").with_style(Attr::Bold),
-            Cell::new(&format!("{:.2}%", self.variance.min_latency_ms())),
+            Cell::new(&format!("{:.2}%", self.deviation.min_latency_ms())),
             Cell::new(&self.new.min_latency_ms().to_string()),
             Cell::new(&self.old.min_latency_ms().to_string()),
         ]));
         table.add_row(Row::new(vec![
             Cell::new("Maximum latency ms").with_style(Attr::Bold),
-            Cell::new(&format!("{:.2}%", self.variance.max_latency_ms())),
+            Cell::new(&format!("{:.2}%", self.deviation.max_latency_ms())),
             Cell::new(&self.new.max_latency_ms().to_string()),
             Cell::new(&self.old.max_latency_ms().to_string()),
         ]));
         table.add_row(Row::new(vec![
             Cell::new("Stdev latency ms").with_style(Attr::Bold),
-            Cell::new(&format!("{:.2}%", self.variance.stdev_latency_ms())),
+            Cell::new(&format!("{:.2}%", self.deviation.stdev_latency_ms())),
             Cell::new(&self.new.stdev_latency_ms().to_string()),
             Cell::new(&self.old.stdev_latency_ms().to_string()),
         ]));
         table.add_row(Row::new(vec![
             Cell::new("Transfer Mb").with_style(Attr::Bold),
-            Cell::new(&format!("{:.2}%", self.variance.transfer_mb())),
+            Cell::new(&format!("{:.2}%", self.deviation.transfer_mb())),
             Cell::new(&self.new.transfer_mb().to_string()),
             Cell::new(&self.old.transfer_mb().to_string()),
         ]));
         table.add_row(Row::new(vec![
             Cell::new("Connect errors").with_style(Attr::Bold),
-            Cell::new(&format!("{:.2}%", self.variance.errors_connect())),
+            Cell::new(&format!("{:.2}%", self.deviation.errors_connect())),
             Cell::new(&self.new.errors_connect().to_string()),
             Cell::new(&self.old.errors_connect().to_string()),
         ]));
         table.add_row(Row::new(vec![
             Cell::new("Read errors").with_style(Attr::Bold),
-            Cell::new(&format!("{:.2}%", self.variance.errors_read())),
+            Cell::new(&format!("{:.2}%", self.deviation.errors_read())),
             Cell::new(&self.new.errors_read().to_string()),
             Cell::new(&self.old.errors_read().to_string()),
         ]));
         table.add_row(Row::new(vec![
             Cell::new("Write errors").with_style(Attr::Bold),
-            Cell::new(&format!("{:.2}%", self.variance.errors_write())),
+            Cell::new(&format!("{:.2}%", self.deviation.errors_write())),
             Cell::new(&self.new.errors_write().to_string()),
             Cell::new(&self.old.errors_write().to_string()),
         ]));
         table.add_row(Row::new(vec![
             Cell::new("Status errors (not 2xx/3xx)").with_style(Attr::Bold),
-            Cell::new(&format!("{:.2}%", self.variance.errors_status())),
+            Cell::new(&format!("{:.2}%", self.deviation.errors_status())),
             Cell::new(&self.new.errors_status().to_string()),
             Cell::new(&self.old.errors_status().to_string()),
         ]));
         table.add_row(Row::new(vec![
             Cell::new("Timeout errors").with_style(Attr::Bold),
-            Cell::new(&format!("{:.2}%", self.variance.errors_timeout())),
+            Cell::new(&format!("{:.2}%", self.deviation.errors_timeout())),
             Cell::new(&self.new.errors_timeout().to_string()),
             Cell::new(&self.old.errors_timeout().to_string()),
         ]));
-        write!(f, "## Rust Wrk benchmark variance report:\n{}", table)
+        write!(f, "## Rust Wrk benchmark report:\n{}", table)
     }
 }

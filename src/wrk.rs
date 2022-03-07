@@ -17,7 +17,7 @@ use url::Url;
 use crate::{
     benchmark::{Benchmark, BenchmarkBuilder},
     error::WrkError,
-    result::{Variance, WrkResult, WrkResultBuilder},
+    result::{Deviation, WrkResult, WrkResultBuilder},
     Gnuplot, LuaScript, Result,
 };
 
@@ -295,53 +295,23 @@ impl Wrk {
         self.best_benchmark(self.benchmarks_history())
     }
 
-    fn calculate_variance(&self, new: &f64, old: &f64) -> f64 {
-        (new - old) / old * 100.0
-    }
-
     pub fn all_benchmarks(&self) -> Benchmarks {
         let mut history = self.benchmarks_history().clone();
         history.append(&mut self.benchmarks().clone());
         history
     }
 
-    pub fn variance(&mut self, period: HistoryPeriod) -> Result<Variance> {
+    pub fn deviation(&mut self, period: HistoryPeriod) -> Result<Deviation> {
         self.load(period, false)?;
         let new = self.best()?;
         let old = self.historical_best()?;
-        Ok(Variance::new(new, old))
+        Ok(Deviation::new(new, old))
     }
 
     pub fn plot(&self, title: &str, output: &Path, benchmarks: &Benchmarks) -> Result<()> {
         Gnuplot::new(title, output).plot(benchmarks)
     }
 }
-
-// #[cfg(test)]
-// mod tests {
-//     use std::{thread, time::Duration};
-
-//     use super::*;
-//     use crate::benchmark::BenchmarkBuilder;
-
-//     #[test]
-//     fn benchmark() {
-//         let mut wrk = WrkBuilder::default()
-//             .url("http://localhost:13734/some".to_string())
-//             .build()
-//             .unwrap();
-//         // wrk.bench_exponential(Some(Duration::from_secs(30))).unwrap();
-//         // println!("{}", wrk.variance(HistoryPeriod::Last).unwrap());
-//         wrk.bench(&vec![BenchmarkBuilder::default()
-//             .duration(Duration::from_secs(5))
-//             .build()
-//             .unwrap()])
-//             .unwrap();
-//         wrk.load(HistoryPeriod::Day, false).unwrap();
-//         // wrk.plot("Wrk Weeeeeee", Path::new("./some.png"), &wrk.all_benchmarks())
-//         // .unwrap();
-//     }
-// }
 
 #[cfg(test)]
 mod tests {
@@ -393,7 +363,7 @@ mod tests {
             .build()
             .unwrap()])
             .unwrap();
-        // println!("{}", wrk.variance(HistoryPeriod::Hour).unwrap());
+        // println!("{}", wrk.deviation(HistoryPeriod::Hour).unwrap());
         // wrk.load(HistoryPeriod::Day, false).unwrap();
         // wrk.plot("Wrk Weeeeeee", Path::new("./some.png"), &wrk.all_benchmarks())
         // .unwrap();
